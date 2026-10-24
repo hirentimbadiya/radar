@@ -13,13 +13,13 @@
 # WebKitGTK starts helper processes (WebKitNetworkProcess, WebKitWebProcess)
 # from a directory compiled into libwebkit2gtk; release builds ignore
 # WEBKIT_EXEC_PATH. Copied as-is, the image either fails on other distros with
-# "Unable to spawn a new child process" (wailsapp/wails#4313) or, where the
-# build machine's path exists, runs that system's helpers against the bundled
-# library. So the helpers are bundled next to the libraries in usr/lib, the
-# path in the bundled library is rewritten to ".", NUL-padded to the same
-# length, and AppRun starts the app in $APPDIR/usr/lib, where "." resolves to
-# the bundled helpers. Wails v3 handles its own AppImages the same way
-# (wailsapp/wails#6213).
+# "Unable to spawn a new child process" or, where the build machine's path
+# exists, runs that system's helpers against the bundled library. So the
+# helpers are bundled next to the libraries in usr/lib, the path in the bundled
+# library is rewritten to ".", NUL-padded to the same length, and AppRun starts
+# the app in $APPDIR/usr/lib, where "." resolves to the bundled helpers. WebKit
+# resolves "." on every helper spawn, so the app has to stay in that directory;
+# it reads the user's original directory from OWD instead (internal/desktopenv).
 #
 # Environment:
 #   LINUXDEPLOY   use this linuxdeploy instead of downloading the pinned one
