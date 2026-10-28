@@ -1139,6 +1139,9 @@ export function getResourceStatus(kind: string, data: any): { text: string; colo
     if (k === 'instrumentations') return getOpenTelemetryInstrumentationStatus(data)
   }
   if (k === 'canaries' && isApiGroup(data.apiVersion, 'flagger.app')) return getFlaggerCanaryStatus(data)
+  // A SecretProviderClass is configuration with no status of its own; mount
+  // state belongs to each Pod and is shown in the Pod drawer.
+  if (k === 'secretproviderclasses' && isApiGroup(data.apiVersion, SECRETS_STORE_GROUP)) return null
   if (k === 'pods') return getPodStatus(data)
   if (['deployments', 'statefulsets', 'daemonsets', 'rollouts'].includes(k)) {
     return getWorkloadDisplayStatus(data, k).status

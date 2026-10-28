@@ -54,7 +54,7 @@ const mountedStatus = {
     objects: [{ id: 'db-password', version: 'v-hash-1' }],
     podName: 'webapp',
     secretProviderClassName: 'vault-database',
-    targetPath: '/var/lib/kubelet/pods/x/volumes/kubernetes.io~csi/secrets-store/mount',
+    targetPath: `/var/lib/kubelet/pods/${POD_UID}/volumes/kubernetes.io~csi/secrets-store/mount`,
   },
 }
 
@@ -90,6 +90,12 @@ describe('getSecretsStoreVolumes', () => {
     const other: any = pod()
     other.spec.volumes[1].csi.driver = 'ebs.csi.aws.com'
     expect(getSecretsStoreVolumes(other)).toEqual([])
+  })
+
+  it('includes mounts from ephemeral debug containers', () => {
+    const debugged: any = pod()
+    debugged.spec.ephemeralContainers = [{ name: 'debugger', volumeMounts: [{ name: 'secrets-store', mountPath: '/debug/secrets' }] }]
+    expect(getSecretsStoreVolumes(debugged)[0].mounts).toContainEqual({ container: 'debugger', mountPath: '/debug/secrets' })
   })
 
   it('keeps a volume that names no class', () => {
@@ -156,6 +162,27 @@ describe('getSecretsStoreMountState', () => {
     expect(getSecretsStoreMountState(pod(), volume, { state: 'loading' })).toEqual({ state: 'unknown', reason: 'loading' })
     expect(getSecretsStoreMountState(pod(), volume, ok([], false))).toEqual({ state: 'unknown', reason: 'incomplete' })
     expect(getSecretsStoreMountState(pod(), volume, { state: 'unavailable', message: 'not installed' })).toEqual({ state: 'unknown', reason: 'unavailable', message: 'not installed' })
+  })
+
+  it('does not let one volume\'s status prove a sibling volume that shares its class', () => {
+    const twoVolumes: any = pod({ phase: 'Pending', running: false })
+    twoVolumes.spec.volumes.push({ name: 'secrets-store-2', csi: { driver: 'secrets-store.csi.k8s.io', volumeAttributes: { secretProviderClass: 'vault-database' } } })
+    const [first, second] = getSecretsStoreVolumes(twoVolumes)
+    expect(getSecretsStoreMountState(twoVolumes, first, ok([mountedStatus])).state).toBe('mounted')
+    expect(getSecretsStoreMountState(twoVolumes, second, ok([mountedStatus])).state).toBe('not-mounted-yet')
+  })
+
+  it('does not call a pending Pod unmounted from a partial status read', () => {
+    const waiting = pod({ phase: 'Pending', running: false })
+    expect(getSecretsStoreMountState(waiting, volume, ok([], false))).toEqual({ state: 'unknown', reason: 'incomplete' })
+  })
+
+  it('ignores a failure event from an earlier Pod with the same name', () => {
+    const waiting: any = pod({ phase: 'Pending', running: false })
+    waiting.metadata.creationTimestamp = '2026-10-28T15:00:00Z'
+    expect(getSecretsStoreMountState(waiting, volume, ok([]), [{ ...failedMountEvent, uid: 'old-pod-uid' }]).state).toBe('not-mounted-yet')
+    expect(getSecretsStoreMountState(waiting, volume, ok([]), [failedMountEvent]).state).toBe('not-mounted-yet')
+    expect(getSecretsStoreMountState(waiting, volume, ok([]), [{ ...failedMountEvent, uid: POD_UID }]).state).toBe('failed')
   })
 
   it('ignores an old failure once the Pod is running', () => {

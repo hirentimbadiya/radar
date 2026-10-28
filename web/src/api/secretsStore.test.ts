@@ -11,6 +11,11 @@ describe('toSecretsStoreRead', () => {
     expect(toSecretsStoreRead({ data: [{}], coverage: partial('radar_forbidden') as any, error: null, isLoading: false })).toEqual({ state: 'ok', items: [{}], complete: false })
   })
 
+  it('does not trust absence from a list without coverage', () => {
+    expect(toSecretsStoreRead({ data: [], coverage: { status: 'unknown' }, error: null, isLoading: false })).toEqual({ state: 'ok', items: [], complete: false })
+    expect(toSecretsStoreRead({ data: [], error: null, isLoading: false })).toEqual({ state: 'ok', items: [], complete: false })
+  })
+
   it('keeps a denial apart from an empty list', () => {
     expect(toSecretsStoreRead({ error: new ApiError('forbidden', 403), isLoading: false })).toEqual({ state: 'forbidden' })
     expect(toSecretsStoreRead({ data: [], coverage: partial('user_forbidden') as any, error: null, isLoading: false })).toEqual({ state: 'forbidden' })

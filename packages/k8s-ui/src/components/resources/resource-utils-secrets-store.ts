@@ -62,6 +62,8 @@ export interface SecretsStoreEvent {
   eventType?: string
   timestamp?: string
   count?: number
+  /** The involved object's UID, as Radar's timeline reports it. */
+  uid?: string
 }
 
 /** Exact API group match: another CRD may share these plurals. */
@@ -72,7 +74,7 @@ export function isSecretsStoreApiVersion(apiVersion: unknown): boolean {
 /** The Pod's Secrets Store CSI volumes with the containers that mount them. */
 export function getSecretsStoreVolumes(pod: any): SecretsStoreVolume[] {
   const volumes: any[] = Array.isArray(pod?.spec?.volumes) ? pod.spec.volumes : []
-  const containers: any[] = [...(pod?.spec?.initContainers ?? []), ...(pod?.spec?.containers ?? [])]
+  const containers: any[] = [...(pod?.spec?.initContainers ?? []), ...(pod?.spec?.containers ?? []), ...(pod?.spec?.ephemeralContainers ?? [])]
   return volumes
     .filter(volume => volume?.csi?.driver === SECRETS_STORE_DRIVER && typeof volume.name === 'string')
     .map(volume => {
@@ -121,26 +123,41 @@ export function lookupSecretProviderClass(className: string | undefined, classes
 }
 
 /**
- * The status the driver wrote for this Pod and class. Matched by the owning
+ * The status the driver wrote for this Pod's volume. Matched by the owning
  * Pod's UID, so a status left by an earlier Pod with the same name (a
  * StatefulSet replica) does not count. Its name is derived and not an identity.
+ * The driver names it per Pod and class, so when two volumes share a class
+ * only the one in its target path is proven mounted.
  */
-export function findSecretsStorePodStatus(pod: any, className: string, statuses: any[]): any | undefined {
+export function findSecretsStorePodStatus(pod: any, volume: SecretsStoreVolume, statuses: any[]): any | undefined {
   const uid = pod?.metadata?.uid
   const podName = pod?.metadata?.name
+  const volumeSegment = `/kubernetes.io~csi/${volume.volumeName}/`
   return statuses.find(status => {
-    if (status?.status?.secretProviderClassName !== className) return false
+    if (!volume.className || status?.status?.secretProviderClassName !== volume.className) return false
+    const targetPath = status?.status?.targetPath
+    if (typeof targetPath === 'string' && targetPath !== '' && !targetPath.includes(volumeSegment)) return false
     const owners: any[] = status?.metadata?.ownerReferences ?? []
     if (uid) return owners.some(owner => owner?.kind === 'Pod' && owner?.uid === uid)
     return status?.status?.podName === podName
   })
 }
 
-/** The latest kubelet mount failure for this volume, if any. */
-export function findSecretsStoreMountFailure(volumeName: string, events: SecretsStoreEvent[] | undefined): SecretsStoreEvent | undefined {
+/**
+ * The latest kubelet mount failure for this volume, if any. Events are read by
+ * Pod name, so one from an earlier Pod with the same name is dropped by UID,
+ * or by time when the event carries none.
+ */
+export function findSecretsStoreMountFailure(volumeName: string, events: SecretsStoreEvent[] | undefined, pod?: any): SecretsStoreEvent | undefined {
   const needle = `volume "${volumeName}"`
+  const uid = pod?.metadata?.uid
+  const created = Date.parse(pod?.metadata?.creationTimestamp ?? '')
+  const current = (event: SecretsStoreEvent) => {
+    if (uid && event.uid) return event.uid === uid
+    return Number.isNaN(created) || !(Date.parse(event.timestamp ?? '') < created)
+  }
   return (events ?? [])
-    .filter(event => event?.reason === 'FailedMount' && event.eventType === 'Warning' && typeof event.message === 'string' && event.message.includes(needle))
+    .filter(event => event?.reason === 'FailedMount' && event.eventType === 'Warning' && typeof event.message === 'string' && event.message.includes(needle) && current(event))
     .sort((a, b) => Date.parse(b.timestamp ?? '') - Date.parse(a.timestamp ?? '') || 0)[0]
 }
 
@@ -157,9 +174,7 @@ export function getSecretsStoreMountState(
   statuses: SecretsStoreRead<any>,
   events?: SecretsStoreEvent[],
 ): SecretsStoreMountState {
-  const status = volume.className && statuses.state === 'ok'
-    ? findSecretsStorePodStatus(pod, volume.className, statuses.items)
-    : undefined
+  const status = statuses.state === 'ok' ? findSecretsStorePodStatus(pod, volume, statuses.items) : undefined
   if (status) {
     if (status.status?.mounted !== true) return { state: 'reported-unmounted' }
     const objects: any[] = Array.isArray(status.status?.objects) ? status.status.objects : []
@@ -173,11 +188,13 @@ export function getSecretsStoreMountState(
   }
   // A failure the kubelet reported is evidence on its own, even when the
   // status list could not be read.
-  const failure = findSecretsStoreMountFailure(volume.volumeName, events)
+  const failure = findSecretsStoreMountFailure(volume.volumeName, events, pod)
   if (failure && podAwaitsMount(pod)) return { state: 'failed', message: failure.message!, count: failure.count, timestamp: failure.timestamp }
   if (statuses.state !== 'ok') return unknownFrom(statuses)
-  if (podAwaitsMount(pod)) return { state: 'not-mounted-yet' }
+  // A pending Pod can already have this volume mounted; only a complete read
+  // proves it has no status yet.
   if (!statuses.complete) return { state: 'unknown', reason: 'incomplete' }
+  if (podAwaitsMount(pod)) return { state: 'not-mounted-yet' }
   return { state: 'not-recorded' }
 }
 

@@ -1,6 +1,7 @@
 import { KeyRound } from 'lucide-react'
 import { Badge, type BadgeSeverity } from '../../ui/Badge'
 import { Section, Property, PropertyList, ResourceLink } from '../../ui/drawer-components'
+import { toneTextClass } from '../../ui/status-tone'
 import type { ResourceRef } from '../../../types'
 import {
   SECRETS_STORE_GROUP,
@@ -50,22 +51,22 @@ function SyncedSecretList({ secrets, namespace, onNavigate }: { secrets: Secrets
 }
 
 function ClassValue({ className, lookup, namespace, onNavigate }: { className?: string; lookup: SecretsStoreClassLookup; namespace: string; onNavigate?: Navigate }) {
-  if (!className) return <span className="text-red-600 dark:text-red-400">Volume names no SecretProviderClass</span>
+  if (!className) return <span className={toneTextClass('unhealthy')}>Volume names no SecretProviderClass</span>
   return <span className="break-words">
     <ResourceLink name={className} kind={SECRET_PROVIDER_CLASSES} group={SECRETS_STORE_GROUP} namespace={namespace} onNavigate={lookup.state === 'missing' ? undefined : onNavigate} />
-    {lookup.state === 'missing' && <span className="text-red-600 dark:text-red-400"> · not found in this namespace</span>}
+    {lookup.state === 'missing' && <span className={toneTextClass('unhealthy')}> · not found in this namespace</span>}
     {lookup.state === 'unknown' && lookup.reason !== 'loading' && <span className="text-theme-text-tertiary"> · {secretsStoreUnknownText(lookup.reason, 'SecretProviderClasses')}</span>}
   </span>
 }
 
 function MountDetail({ mount }: { mount: SecretsStoreMountState }) {
   if (mount.state === 'failed') {
-    return <p className="mt-2 text-xs break-words text-red-600 dark:text-red-400">
+    return <p className={`mt-2 text-xs break-words ${toneTextClass('unhealthy')}`}>
       {mount.message}{mount.count && mount.count > 1 ? ` (×${mount.count})` : ''}
     </p>
   }
   if (mount.state === 'not-recorded') {
-    return <p className="mt-2 text-xs text-theme-text-tertiary">The driver writes a status only after a successful mount, and none exists for this Pod. It may have been deleted, or the volume was mounted by a driver version that does not record one.</p>
+    return <p className="mt-2 text-xs text-theme-text-tertiary">The driver writes a status only after a successful mount, and none exists for this volume. It may have been deleted, or the volume was mounted by a driver version that does not record one.</p>
   }
   return null
 }
@@ -91,7 +92,7 @@ export function SecretsStoreMountsSection({ pod, classes, statuses, events, onNa
   if (volumes.length === 0) return null
   const namespace = pod?.metadata?.namespace ?? ''
   return (
-    <Section title={`Secrets Store CSI (${volumes.length})`} icon={KeyRound} defaultExpanded>
+    <Section title={`Secrets Store CSI (${volumes.length})`} icon={KeyRound} defaultExpanded={true}>
       <div className="space-y-3">{volumes.map(volume => {
         const lookup = lookupSecretProviderClass(volume.className, classes)
         const mount = getSecretsStoreMountState(pod, volume, statuses, events)
@@ -135,7 +136,7 @@ export function SecretProviderClassRenderer({ data, pods, statuses, onNavigate }
   const namespace = data?.metadata?.namespace ?? ''
   const synced = getSecretsStoreSyncedSecrets(data)
   return <>
-    <Section title="Secret Provider Class" icon={KeyRound} defaultExpanded>
+    <Section title="Secret Provider Class" icon={KeyRound} defaultExpanded={true}>
       <PropertyList>
         <Property label="Provider" value={getSecretsStoreProvider(data) ?? 'Not specified'} />
         <Property label="Synced Secrets" value={synced.length ? <SyncedSecretList secrets={synced} namespace={namespace} onNavigate={onNavigate} /> : 'None (mounted as files only)'} />
@@ -149,13 +150,13 @@ export function SecretProviderClassRenderer({ data, pods, statuses, onNavigate }
 function SecretProviderClassUsageSection({ data, pods, statuses, onNavigate }: { data: any; pods: SecretsStoreRead<any>; statuses: SecretsStoreRead<any>; onNavigate?: Navigate }) {
   const namespace = data?.metadata?.namespace ?? ''
   if (pods.state !== 'ok') {
-    return <Section title="Pods" defaultExpanded>
+    return <Section title="Pods" defaultExpanded={true}>
       <p className="text-sm text-theme-text-tertiary">{secretsStoreUnknownText(pods.state === 'unavailable' ? 'unavailable' : pods.state, 'Pods')}</p>
     </Section>
   }
   const usage = getSecretProviderClassUsage(data, pods.items, statuses)
   return (
-    <Section title={`Pods (${usage.length}${pods.complete ? '' : '+'})`} defaultExpanded>
+    <Section title={`Pods (${usage.length}${pods.complete ? '' : '+'})`} defaultExpanded={true}>
       {usage.length === 0
         ? <p className="text-sm text-theme-text-tertiary">{pods.complete ? 'No Pod in this namespace mounts this class.' : 'No Pod mounting this class was found in the Pods Radar could read.'}</p>
         : <PropertyList>{usage.map(row => (

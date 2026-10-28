@@ -32,6 +32,6 @@ export function toSecretsStoreRead<T>(query: ListQuery<T>): SecretsStoreRead<T> 
     if (query.data.length === 0 && coverage.gaps.some(gap => gap.code === 'kind_sync_pending')) return { state: 'loading' }
     return { state: 'ok', items: query.data, complete: false }
   }
-  // An older Radar sends no coverage; its lists predate partial answers.
-  return { state: 'ok', items: query.data, complete: true }
+  // Without coverage (an older Radar) a list cannot establish absence.
+  return { state: 'ok', items: query.data, complete: coverage?.status === 'complete' }
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { renderToString } from 'react-dom/server'
-import { ResourceRendererDispatch } from '../../shared/ResourceRendererDispatch'
+import { ResourceRendererDispatch, getResourceStatus } from '../../shared/ResourceRendererDispatch'
 import { SecretProviderClassRenderer, SecretsStoreMountsSection } from './SecretsStoreRenderers'
 
 const spc = (apiVersion = 'secrets-store.csi.x-k8s.io/v1') => ({
@@ -41,6 +41,10 @@ describe('SecretProviderClass dispatch', () => {
     expect(html).toContain('Secret Provider Class')
     expect(html).toContain('db-creds-synced')
     expect(html).not.toContain('vaultAddress')
+  })
+
+  it('reports no status of its own for a class', () => {
+    expect(getResourceStatus('secretproviderclasses', spc())).toBeNull()
   })
 
   it('leaves a same-plural resource from another group to the generic renderer', () => {
