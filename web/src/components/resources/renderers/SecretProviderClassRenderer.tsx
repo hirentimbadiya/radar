@@ -17,8 +17,8 @@ export function SecretProviderClassRenderer({ data, onNavigate }: { data: any; o
   return (
     <BaseSecretProviderClassRenderer
       data={data}
-      pods={toSecretsStoreRead(pods)}
-      statuses={toSecretsStoreRead(statuses)}
+      pods={toSecretsStoreRead({ data: pods.data, coverage: pods.coverage, error: pods.error, isLoading: pods.isLoading })}
+      statuses={toSecretsStoreRead({ data: statuses.data, coverage: statuses.coverage, error: statuses.error, isLoading: statuses.isLoading })}
       onNavigate={onNavigate}
     />
   )

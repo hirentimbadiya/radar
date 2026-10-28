@@ -127,8 +127,8 @@ export function PodRenderer({ data, onCopy, copied, onNavigate, onOpenLogs, reso
       policyError={policyError as Error | null}
       namespaceLimitRangeNames={limitRangesReady ? podLimitRangeNames(limitRanges) : undefined}
       secretsStore={usesSecretsStore ? {
-        classes: toSecretsStoreRead(providerClasses),
-        statuses: toSecretsStoreRead(providerStatuses),
+        classes: toSecretsStoreRead({ data: providerClasses.data, coverage: providerClasses.coverage, error: providerClasses.error, isLoading: providerClasses.isLoading }),
+        statuses: toSecretsStoreRead({ data: providerStatuses.data, coverage: providerStatuses.coverage, error: providerStatuses.error, isLoading: providerStatuses.isLoading }),
         events: podEvents.k8sError ? undefined : podEvents.k8sEvents,
       } : undefined}
       canExec={canExec}
